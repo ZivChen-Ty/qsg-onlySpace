@@ -460,6 +460,10 @@ namespace NGT {
 	  buildTimeLimit		= 0.0;
 	  outgoingEdge			= 10;
 	  incomingEdge			= 80;
+	  range = 100;
+	  threshold = 1;
+	  rangeMax = 400;
+	  ifES = 0;
 	}
 	void clear() {
 	  truncationThreshold		= -1;
@@ -477,6 +481,10 @@ namespace NGT {
 	  buildTimeLimit		= -1;
 	  outgoingEdge			= -1;
 	  incomingEdge			= -1;
+	  range = -1;
+	  threshold = -1;
+	  rangeMax = -1;
+	  ifES = -1;
 	}
 	void set(NGT::Property &prop);
 	void get(NGT::Property &prop);
@@ -496,6 +504,10 @@ namespace NGT {
 	  p.set("BuildTimeLimit", buildTimeLimit);
 	  p.set("OutgoingEdge", outgoingEdge);
 	  p.set("IncomingEdge", incomingEdge);
+	  p.set("range", range);
+	  p.set("threshold", threshold);
+	  p.set("rangeMax", rangeMax);
+	  p.set("ifES", ifES);
 	  switch (graphType) {
 	  case NeighborhoodGraph::GraphTypeKNNG: p.set("GraphType", "KNNG"); break;
 	  case NeighborhoodGraph::GraphTypeANNG: p.set("GraphType", "ANNG"); break;
@@ -529,6 +541,10 @@ namespace NGT {
 	  buildTimeLimit = p.getf("BuildTimeLimit", buildTimeLimit);
 	  outgoingEdge = p.getl("OutgoingEdge", outgoingEdge);
 	  incomingEdge = p.getl("IncomingEdge", incomingEdge);
+	  range = p.getl("range", range);
+	  threshold = p.getl("threshold", threshold);
+	  rangeMax = p.getl("rangeMax", rangeMax);
+	  ifES = p.getl("ifES", ifES);
 	  PropertySet::iterator it = p.find("GraphType");
 	  if (it != p.end()) {
 	    if (it->second == "KNNG")		graphType = NeighborhoodGraph::GraphTypeKNNG;
@@ -582,6 +598,10 @@ namespace NGT {
 	float		buildTimeLimit;
 	int16_t		outgoingEdge;
 	int16_t		incomingEdge;
+	int16_t		range;
+	int16_t threshold;
+	int16_t ifES;
+	int16_t rangeMax;
       };
 
       NeighborhoodGraph(): objectSpace(0) {
@@ -685,6 +705,68 @@ namespace NGT {
 	}
 	return;
       }
+
+	  void insertANNGNodeForSSG(ObjectID id, ObjectDistances& results) {
+		  repository.insert(id, results);
+		  NGT::ObjectSpace::Comparator& comparator = objectSpace->getComparator();
+		  ObjectRepository& objectRepository = getObjectRepository();
+		  float threshold = property.threshold * 1.0 / 100.0; //所选角度的cos值，现在为60度
+		  unsigned range = property.range;//第一次加边的最大出度（可变）
+		  unsigned rangeMax = property.rangeMax;//实际的最大出度（可变）
+		  unsigned count = 0;
+		  unsigned countRi = 0;
+		  ObjectDistances addIds;
+		  GraphNode& node = *getNode(id);
+		  for (ObjectDistances::iterator ri = node.begin(); ri != node.end(); ri++) {
+			  float riDistance = (*ri).distance;
+			  uint32_t riId = (*ri).id;
+			  assert(id != riId);
+			  GraphNode& resultNode = *getNode(riId);
+			  bool occlude = false;
+			  for (ObjectDistances::iterator t = addIds.begin(); t != addIds.end(); t++) {
+				  uint32_t tId = (*t).id;
+				  float tDistance = (*t).distance;
+				  if (tId == riId || count >= range) {
+					  occlude = true;
+					  break;
+				  }
+				  float djk = PrimitiveComparator::compareL2NoSqrt2
+				  (
+					  &(*objectRepository.get(riId))[0],
+					  &(*objectRepository.get(tId))[0],
+					  objectSpace->getPaddedDimension());
+				  float cos_ij = (tDistance * tDistance + riDistance * riDistance - djk) / 2 / (tDistance * riDistance);
+				  if (cos_ij > threshold) {
+					  occlude = true;
+					  break;
+				  }
+
+			  }
+			  if (!occlude) {
+				  count++;
+				  addIds.push_back((*ri));
+			  }
+
+			  ObjectDistances::iterator end = resultNode.end();
+			  if (resultNode.size() > 0 && comparator(*objectRepository.get(id), *objectRepository.get(riId)) >= (*end).distance)
+				  continue;
+
+			  GraphNode& node1 = *getNode(riId);
+			  addEdge(node1, id, riDistance, true);
+
+			  if (node1.size() > rangeMax) {
+				  countRi++;
+				  std::sort(node1.begin(), node1.end());
+				  node1.resize(rangeMax);
+			  }
+		  }
+		  node.clear();
+		  for (ObjectDistances::iterator ri = addIds.begin(); ri != addIds.end(); ri++) {
+			  addEdge(node, (*ri).id, (*ri).distance, true);
+		  }
+		  return;
+	  }
+
 
       void insertIANNGNode(ObjectID id, ObjectDistances &results) {
 	repository.insert(id, results);

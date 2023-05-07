@@ -72,6 +72,7 @@ namespace NGT {
 	indexType	= IndexType::GraphAndTree;
 	objectAlignment	= ObjectAlignment::ObjectAlignmentFalse;
 	pathAdjustmentInterval = 0;
+    searchA = 700;
 #ifdef NGT_SHARED_MEMORY_ALLOCATOR
 	databaseType	= DatabaseType::MemoryMappedFile;
       	//graphSharedMemorySize	= 512; // MB
@@ -103,11 +104,13 @@ namespace NGT {
 	prefetchOffset	= -1;
 	prefetchSize	= -1;
 	accuracyTable	= "";
+    searchA = -1;
       }
 
       void exportProperty(NGT::PropertySet &p) {
 	p.set("Dimension", dimension);
 	p.set("ThreadPoolSize", threadPoolSize);
+    p.set("searchA", searchA);
 	switch (objectType) {
 	case ObjectSpace::ObjectType::Uint8: p.set("ObjectType", "Integer-1"); break;
 	case ObjectSpace::ObjectType::Float: p.set("ObjectType", "Float-4"); break;
@@ -163,6 +166,7 @@ namespace NGT {
 	setDefault();
 	dimension = p.getl("Dimension", dimension);
 	threadPoolSize = p.getl("ThreadPoolSize", threadPoolSize);
+    searchA = p.getl("searchA", searchA);
 	PropertySet::iterator it = p.find("ObjectType");
 	if (it != p.end()) {
 	  if (it->second == "Float-4") {
@@ -289,6 +293,7 @@ namespace NGT {
       int		prefetchSize;
       std::string	accuracyTable;
       std::string	searchType;	// test
+      int searchA;
     };
 
     class InsertionResult {

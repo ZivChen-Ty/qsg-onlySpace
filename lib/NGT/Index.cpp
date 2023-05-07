@@ -341,6 +341,8 @@ NGT::Index::Property::set(NGT::Property &prop) {
   if (prop.prefetchOffset != -1) prefetchOffset = prop.prefetchOffset;
   if (prop.prefetchSize != -1) prefetchSize = prop.prefetchSize;
   if (prop.accuracyTable != "") accuracyTable = prop.accuracyTable;
+  if (prop.searchA != -1) searchA = prop.searchA;
+
 }
 
 void 
@@ -740,6 +742,61 @@ insertMultipleSearchResults(GraphIndex &neighborhoodGraph,
     }
   }
 }
+
+
+static void
+insertMultipleSearchResultsForSSG(GraphIndex& neighborhoodGraph,
+    CreateIndexThreadPool::OutputJobQueue& output,
+    size_t dataSize)
+{
+    // compute distances among all of the resultant objects
+    if (neighborhoodGraph.NeighborhoodGraph::property.graphType == NeighborhoodGraph::GraphTypeANNG ||
+        neighborhoodGraph.NeighborhoodGraph::property.graphType == NeighborhoodGraph::GraphTypeIANNG ||
+        neighborhoodGraph.NeighborhoodGraph::property.graphType == NeighborhoodGraph::GraphTypeONNG ||
+        neighborhoodGraph.NeighborhoodGraph::property.graphType == NeighborhoodGraph::GraphTypeDNNG) {
+        // This processing occupies about 30% of total indexing time when batch size is 200.
+        // Only initial batch objects should be connected for each other.
+        // The number of nodes in the graph is checked to know whether the batch is initial.
+        //size_t size = NeighborhoodGraph::property.edgeSizeForCreation;
+        size_t size = neighborhoodGraph.NeighborhoodGraph::property.edgeSizeForCreation;
+        // add distances from a current object to subsequence objects to imitate of sequential insertion.
+
+        sort(output.begin(), output.end());	// sort by batchIdx
+
+        for (size_t idxi = 0; idxi < dataSize; idxi++) {
+            // add distances
+            ObjectDistances& objs = *output[idxi].results;
+            for (size_t idxj = 0; idxj < idxi; idxj++) {
+                if (objs.size() >= size)
+                    break;
+                ObjectDistance	r;
+                r.distance = neighborhoodGraph.objectSpace->getComparator()(*output[idxi].object, *output[idxj].object);
+                r.id = output[idxj].id;
+                objs.push_back(r);
+            }
+            // sort and cut excess edges	    
+            std::sort(objs.begin(), objs.end());
+            /* if (objs.size() > 600) {
+                 objs.resize(600);
+             }*/
+        } // for (size_t idxi ....
+    } // if (neighborhoodGraph.graphType == NeighborhoodGraph::GraphTypeUDNNG)
+    // insert resultant objects into the graph as edges
+    for (size_t i = 0; i < dataSize; i++) {
+        CreateIndexJob& gr = output[i];
+        if ((*gr.results).size() == 0) {
+        }
+        if (static_cast<int>(gr.id) > neighborhoodGraph.NeighborhoodGraph::property.edgeSizeForCreation &&
+            static_cast<int>(gr.results->size()) < neighborhoodGraph.NeighborhoodGraph::property.edgeSizeForCreation) {
+            cerr << "createIndex: Warning. The specified number of edges could not be acquired, because the pruned parameter [-S] might be set." << endl;
+            cerr << "  The node id=" << gr.id << endl;
+            cerr << "  The number of edges for the node=" << gr.results->size() << endl;
+            cerr << "  The pruned parameter (edgeSizeForSearch [-S])=" << neighborhoodGraph.NeighborhoodGraph::property.edgeSizeForSearch << endl;
+        }
+        neighborhoodGraph.insertANNGNodeForSSG(gr.id, *gr.results);
+    }
+}
+
 
 void 
 GraphIndex::createIndex(size_t threadPoolSize, size_t sizeOfRepository) 
@@ -1192,6 +1249,38 @@ GraphAndTreeIndex::createIndex(size_t threadPoolSize, size_t sizeOfRepository)
     return;
   }
 
+  if (this->NeighborhoodGraph::property.ifES == 1 && this->NeighborhoodGraph::property.edgeSizeForCreation > 40) {
+      std::cerr << "create tree" << std::endl;
+      ObjectRepository& fr = GraphIndex::objectSpace->getRepository();
+      for (size_t id = 0; id < fr.size(); id++) {
+          if (id % 100000 == 0) {
+              cerr << " Processed id=" << id << endl;
+          }
+          if (fr.isEmpty(id)) {
+              continue;
+          }
+#ifdef NGT_SHARED_MEMORY_ALLOCATOR
+          Object* f = GraphIndex::objectSpace->allocateObject(*fr[id]);
+          DVPTree::InsertContainer tiobj(*f, id);
+#else
+          DVPTree::InsertContainer tiobj(*fr[id], id);
+#endif
+          try {
+              DVPTree::insert(tiobj);
+          }
+          catch (Exception& err) {
+              cerr << "GraphAndTreeIndex::createTreeIndex: Warning. ID=" << id << ":";
+              cerr << err.what() << " continue.." << endl;
+          }
+#ifdef NGT_SHARED_MEMORY_ALLOCATOR
+          GraphIndex::objectSpace->deleteObject(f);
+#endif
+
+      }
+      std::cerr << "create tree end" << std::endl;
+      return;
+  }
+
   Timer	timer;
   size_t	timerInterval = 100000;
   size_t	timerCount = timerInterval;
@@ -1213,6 +1302,10 @@ GraphAndTreeIndex::createIndex(size_t threadPoolSize, size_t sizeOfRepository)
     CreateIndexJob job;
     NGT::ObjectID id = 1;
     for (;;) {
+        if (this->NeighborhoodGraph::property.edgeSizeForCreation >= 40) {
+            temp = this->NeighborhoodGraph::property.edgeSizeForCreation;
+            this->NeighborhoodGraph::property.edgeSizeForCreation = property.searchA;
+        }
       size_t cnt = searchMultipleQueryForCreation(*this, id, job, threads, sizeOfRepository);
 
       if (cnt == 0) {
@@ -1224,8 +1317,14 @@ GraphAndTreeIndex::createIndex(size_t threadPoolSize, size_t sizeOfRepository)
 	cerr << "NNTGIndex::insertGraphIndexByThread: Warning!! Thread response size is wrong." << endl;
 	cnt = output.size();
       }
+      if (this->NeighborhoodGraph::property.edgeSizeForCreation >= 40) {
+          this->NeighborhoodGraph::property.edgeSizeForCreation = temp;
+          insertMultipleSearchResultsForSSG(*this, output, cnt);
 
-      insertMultipleSearchResults(*this, output, cnt);
+      }
+      else {
+          insertMultipleSearchResults(*this, output, cnt);
+      }
 
       for (size_t i = 0; i < cnt; i++) {
 	CreateIndexJob &job = output[i];

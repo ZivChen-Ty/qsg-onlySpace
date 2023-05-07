@@ -41,6 +41,10 @@ NeighborhoodGraph::Property::set(NGT::Property &prop) {
   if (prop.outgoingEdge != -1)                  outgoingEdge = prop.outgoingEdge;
   if (prop.incomingEdge != -1)                  incomingEdge = prop.incomingEdge;
   if (prop.graphType != GraphTypeNone)		graphType = prop.graphType;
+  if (prop.range != -1)		range = prop.range;
+  if (prop.threshold != -1)		threshold = prop.threshold;
+  if (prop.rangeMax != -1)		rangeMax = prop.rangeMax;
+  if (prop.ifES != -1)		ifES = prop.ifES;
 }
 
 void 
@@ -60,6 +64,10 @@ NeighborhoodGraph::Property::get(NGT::Property &prop) {
   prop.buildTimeLimit                   = buildTimeLimit;
   prop.outgoingEdge                     = outgoingEdge;
   prop.incomingEdge                     = incomingEdge;
+  prop.range = range;
+  prop.threshold = threshold;
+  prop.rangeMax = rangeMax;
+  prop.ifES = ifES;
 }
 
 

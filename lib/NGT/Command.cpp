@@ -46,6 +46,11 @@ using namespace std;
     property.pathAdjustmentInterval = args.getl("P", 0);
     property.dynamicEdgeSizeBase = args.getl("B", 30);
     property.buildTimeLimit = args.getf("T", 0.0);
+    property.range = args.getl("R", 100);
+    property.threshold = args.getf("t", 0.1);
+    property.rangeMax = args.getl("M", 400);
+    property.searchA = args.getl("A", 700);
+    property.ifES = args.getl("H", 0);
 
     if (property.dimension <= 0) {
       std::stringstream msg;
