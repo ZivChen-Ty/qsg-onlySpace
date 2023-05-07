@@ -16,7 +16,7 @@ shared_library_without_avx_option = '--shared-library-without-avx'
 shared_library_option = '--shared-library'
 shared_library_avx2_option = '--shared-library-avx2'
 version_file = 'VERSION'
-package = 'ngt'
+package = 'qsgngt'
 module = 'ngtpy'
 
 static_library = False
@@ -92,8 +92,8 @@ with open('README.md', 'r', encoding='utf-8') as fh:
     long_description = fh.read()
 
 args = {
-    'name': package,
-    'version': version,
+    'name': 'qsgngt',
+    'version': '5.0.0',
     'author': 'Yahoo! JAPAN research',
     'author_email': 'miwasaki@yahoo-corp.jp',
     'url': 'https://github.com/yahoojapan/NGT',
